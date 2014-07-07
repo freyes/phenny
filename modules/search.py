@@ -20,6 +20,8 @@ class Grab(web.urllib.URLopener):
 
 def google_ajax(query): 
    """Search using AjaxSearch, and return its JSON."""
+   if isinstance(query, unicode): 
+      query = query.encode('utf-8')
    uri = 'http://ajax.googleapis.com/ajax/services/search/web'
    args = '?v=1.0&safe=off&q=' + web.urllib.quote(query)
    handler = web.urllib._urlopener
@@ -51,6 +53,9 @@ def formatnumber(n):
       parts.insert(i, ',')
    return ''.join(parts)
 
+def old_gc(query):
+   return formatnumber(google_count(query))
+
 def g(phenny, input): 
    """Queries Google for the specified input."""
    query = input.group(2)
@@ -69,7 +74,7 @@ g.commands = ['g']
 g.priority = 'high'
 g.example = '.g swhack'
 
-def gc(phenny, input): 
+def oldgc(phenny, input): 
    """Returns the number of Google results for the specified input."""
    query = input.group(2)
    if not query: 
@@ -77,9 +82,8 @@ def gc(phenny, input):
    query = query.encode('utf-8')
    num = formatnumber(google_count(query))
    phenny.say(query + ': ' + num)
-gc.commands = ['gc']
-gc.priority = 'high'
-gc.example = '.gc extrapolate'
+oldgc.commands = ['ogc', 'oldgc']
+oldgc.example = '.oldgc extrapolate'
 
 r_query = re.compile(
    r'\+?"[^"\\]*(?:\\.[^"\\]*)*"|\[[^]\\]*(?:\\.[^]\\]*)*\]|\S+'
@@ -112,8 +116,9 @@ def bing_search(query, lang='en-GB'):
    query = web.urllib.quote(query)
    base = 'http://www.bing.com/search?mkt=%s&q=' % lang
    bytes = web.get(base + query)
-   m = r_bing.search(bytes)
-   if m: return m.group(1)
+   for result in r_bing.findall(bytes):
+      if "r.msn.com/" in result: continue
+      return result
 
 def bing(phenny, input): 
    """Queries Bing for the specified input."""
@@ -195,6 +200,66 @@ def suggest(phenny, input):
       phenny.say(answer)
    else: phenny.reply('Sorry, no result.')
 suggest.commands = ['suggest']
+
+def new_gc(query):
+   uri = 'https://www.google.com/search?hl=en&q='
+   uri = uri + web.urllib.quote(query).replace('+', '%2B')
+   # if '"' in query: uri += '&tbs=li:1'
+   bytes = web.get(uri)
+   if "did not match any documents" in bytes:
+      return "0"
+   for result in re.compile(r'(?ims)([0-9,]+) results?').findall(bytes):
+      return result
+   return None
+
+def newest_gc(query):
+   uri = 'https://www.google.com/search?hl=en&q='
+   uri = uri + web.urllib.quote(query).replace('+', '%2B')
+   bytes = web.get(uri + '&tbs=li:1')
+   if "did not match any documents" in bytes:
+      return "0"
+   for result in re.compile(r'(?ims)([0-9,]+) results?').findall(bytes):
+      return result
+   return None
+
+def newerest_gc(query):
+   uri = 'https://www.google.com/search?hl=en&q='
+   uri = uri + web.urllib.quote(query).replace('+', '%2B')
+   bytes = web.get(uri + '&prmd=imvns&start=950')
+   if "did not match any documents" in bytes:
+      return "0"
+   for result in re.compile(r'(?ims)([0-9,]+) results?').findall(bytes):
+      return result
+   return None
+
+def ngc(phenny, input):
+   if not input.group(2):
+      return phenny.reply("No query term.")
+   query = input.group(2).encode('utf-8')
+   result = new_gc(query)
+   if result:
+      phenny.say(query + ": " + result)
+   else: phenny.reply("Sorry, couldn't get a result.")
+
+ngc.commands = ['ngc']
+ngc.priority = 'high'
+ngc.example = '.ngc extrapolate'
+
+def gc(phenny, input):
+   if not input.group(2):
+      return phenny.reply("No query term.")
+   query = input.group(2).encode('utf-8')
+   result = query + ": "
+   result += (old_gc(query) or "?") + " (api)"
+   result += ", " + (newerest_gc(query) or "?") + " (end)"
+   result += ", " + (new_gc(query) or "?") + " (site)"
+   if '"' in query:
+      result += ", " + (newest_gc(query) or "?") + " (verbatim)"
+   phenny.say(result)
+
+gc.commands = ['gc']
+gc.priority = 'high'
+gc.example = '.gc extrapolate'
 
 if __name__ == '__main__': 
    print __doc__.strip()

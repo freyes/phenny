@@ -42,15 +42,21 @@ class Bot(asynchat.async_chat):
       import threading
       self.sending = threading.RLock()
 
+   def initiate_send(self):
+      self.sending.acquire()
+      asynchat.async_chat.initiate_send(self)
+      self.sending.release()
+
    # def push(self, *args, **kargs): 
    #    asynchat.async_chat.push(self, *args, **kargs)
 
    def __write(self, args, text=None): 
-      # print '%r %r %r' % (self, args, text)
+      # print 'PUSH: %r %r %r' % (self, args, text)
       try: 
          if text is not None: 
-            self.push((' '.join(args) + ' :' + text)[:512] + '\r\n')
-         else: self.push(' '.join(args)[:512] + '\r\n')
+            # 510 because CR and LF count too, as nyuszika7h points out
+            self.push((' '.join(args) + ' :' + text)[:510] + '\r\n')
+         else: self.push(' '.join(args)[:510] + '\r\n')
       except IndexError: 
          pass
 
@@ -101,7 +107,7 @@ class Bot(asynchat.async_chat):
          line = line[:-1]
       self.buffer = ''
 
-      # print line
+      # print 'GOT:', repr(line)
       if line.startswith(':'): 
          source, line = line[1:].split(' ', 1)
       else: source = None
